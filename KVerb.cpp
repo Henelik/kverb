@@ -126,6 +126,9 @@ void MappingMenu() {
     if (currentMapping == 0) {
         // bias mapping
     }
+    else {
+        // CV or pot mapping
+    }
 }
 
 void UpdateOled() {
