@@ -57,17 +57,28 @@ bool menuSwapped = false;
 /* variable for CV setting menu */
 int cv_link[4] = {0,1,2,3};
 std::string parameter_strings[5] {"dry", "wet", "LPF", "HPF", "feedback"};
-std::string mapping_strings[5] {"bias", "Pot1", "Pot2", "CV 1", "CV 2"};
+std::string mapping_strings[5] {"bias", "Pot1", "Pot2", "CV1", "CV2"};
 std::string sign_strings[3] {"-", "0", "+"};
 std::string multiplier_strings[5] {"/4", "/2", "x1", "x2", "x4"};
 
-float mapping_limits[5][3] = {
+float bias_limits[5][3] = {
     // min, max, increment
     {-1, 1, 0.1}, // dry
     {-1, 1, 0.1}, // wet
     {-1, 1, 0.1}, // LPF
     {-1, 1, 0.1}, // HPF
     {-1, 1, 0.1}, // feedback
+};
+
+float biases[5] = {0, 0, 0, 0, 0};
+
+int mapping_indices[5][8] = {
+    // Pot1 sign, Pot1 multiplier, Pot2 sign, Pot2 multiplier, CV1 sign, CV1 multiplier, CV2 sign, CV2 multiplier
+    {1, 2, 1, 2, 1, 2, 1, 2}, // dry
+    {1, 2, 1, 2, 1, 2, 1, 2}, // wet
+    {1, 2, 1, 2, 1, 2, 1, 2}, // LPF
+    {1, 2, 1, 2, 1, 2, 1, 2}, // HPF
+    {1, 2, 1, 2, 1, 2, 1, 2}, // feedback
 };
 
 /* Value of the encoder */
@@ -125,6 +136,9 @@ void MappingMenu() {
 
     if (currentMapping == 0) {
         // bias mapping
+        bluemchen.display.SetCursor(6, 16);
+        str = std::to_string(static_cast<float>(biases[currentParam])).substr(0, 4);
+        bluemchen.display.WriteString(cstr, Font_6x8, true);
     }
     else {
         // CV or pot mapping
@@ -173,7 +187,12 @@ void processEncoder() {
             currentMapping = std::min(std::max(int(currentMapping+bluemchen.encoder.Increment()), 0), 4);
         case 2:
             // mapping menu
-            {}
+            if (currentMapping == 0) {
+                biases[currentParam] = std::min(std::max(
+                    biases[currentParam] + bias_limits[currentParam][2] * bluemchen.encoder.Increment(), 
+                    bias_limits[currentParam][0]), 
+                    bias_limits[currentParam][1]);
+            }
     }
 }
 
