@@ -137,7 +137,7 @@ void MappingMenu() {
     if (currentMapping == 0) {
         // bias mapping
         bluemchen.display.SetCursor(6, 16);
-        str = std::to_string(static_cast<float>(biases[currentParam])).substr(0, 4);
+        str = std::to_string(static_cast<int>(biases[currentParam]));
         bluemchen.display.WriteString(cstr, Font_6x8, true);
     }
     else {
