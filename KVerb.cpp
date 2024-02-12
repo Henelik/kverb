@@ -51,6 +51,9 @@ index of mapping_strings
 */
 int currentMapping = 0;
 
+int mappingMenuSelection = 0;
+bool editing = false;
+
 // tracked whether the menu was already swapped with the current encoder press
 bool menuSwapped = false;
 
@@ -142,6 +145,25 @@ void MappingMenu() {
     }
     else {
         // CV or pot mapping
+        bluemchen.display.SetCursor(0, 16 + 8*mappingMenuSelection);
+        str = ">";
+        bluemchen.display.WriteString(cstr, Font_6x8, true);
+
+        bool inverted = editing && mappingMenuSelection == 0;
+        if (inverted) {
+            bluemchen.display.DrawRect(11, 16, 17, 22, true, true);
+        }
+        bluemchen.display.SetCursor(12, 16);
+        str = sign_strings[mapping_indices[currentParam][currentMapping*2]];
+        bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
+
+        inverted = editing && mappingMenuSelection == 1;
+        if (inverted) {
+            bluemchen.display.DrawRect(11, 24, 17, 32, true, true);
+        }
+        bluemchen.display.SetCursor(12, 24);
+        str = multiplier_strings[mapping_indices[currentParam][currentMapping*2+1]];
+        bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
     }
 }
 
@@ -166,6 +188,7 @@ void UpdateOled() {
 void processEncoder() {
     if (!menuSwapped && bluemchen.encoder.Pressed()) {
         if (bluemchen.encoder.TimeHeldMs() > 500) {
+            // long press
             currentMenu = std::max(currentMenu - 1, 0);
             menuSwapped = true;
         }
@@ -173,7 +196,13 @@ void processEncoder() {
 
     if (bluemchen.encoder.FallingEdge()) {
         if (!menuSwapped) {
-            currentMenu = std::min(currentMenu + 1, 2);
+            // short press
+            if (currentMenu == 2 && currentMapping != 0) {
+                editing = !editing;
+            }
+            else {
+                currentMenu = std::min(currentMenu + 1, 2);
+            }
         }
         menuSwapped = false;
     }
@@ -194,6 +223,17 @@ void processEncoder() {
                     biases[currentParam] + bias_limits[currentParam][2] * bluemchen.encoder.Increment(), 
                     bias_limits[currentParam][0]), 
                     bias_limits[currentParam][1]);
+            }
+            else {
+                if (editing) {
+                    mapping_indices[currentParam][mappingMenuSelection+currentMapping*2] = std::min(std::max(
+                        int(mapping_indices[currentParam][mappingMenuSelection+currentMapping*2] + bluemchen.encoder.Increment()),
+                        0),
+                        mappingMenuSelection == 0 ? 2 : 4);
+                }
+                else {
+                    mappingMenuSelection = std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), 0), 1);
+                }
             }
             break;
     }
