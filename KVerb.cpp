@@ -137,7 +137,7 @@ void MappingMenu() {
     if (currentMapping == 0) {
         // bias mapping
         bluemchen.display.SetCursor(6, 16);
-        str = std::to_string(static_cast<int>(biases[currentParam]));
+        str = std::to_string(biases[currentParam]);
         bluemchen.display.WriteString(cstr, Font_6x8, true);
     }
     else {
@@ -182,9 +182,11 @@ void processEncoder() {
         case 0:
             // main menu
             currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), 4);
+            break;
         case 1:
             // parameter menu
             currentMapping = std::min(std::max(int(currentMapping+bluemchen.encoder.Increment()), 0), 4);
+            break;
         case 2:
             // mapping menu
             if (currentMapping == 0) {
@@ -193,6 +195,7 @@ void processEncoder() {
                     bias_limits[currentParam][0]), 
                     bias_limits[currentParam][1]);
             }
+            break;
     }
 }
 
