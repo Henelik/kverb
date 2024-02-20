@@ -10,29 +10,25 @@ Bluemchen bluemchen;
 
 static ReverbSc   verb;
 static DcBlock    blk[2];
-Parameter         lpParam;
-static float      drylevel, send;
 
 Parameter knob1;
 Parameter knob2;
 Parameter cv1;
 Parameter cv2;
 
+enum Params {
+    DRY,
+    WET,
+    LPF,
+    HPF,
+    FEED,
+};
+
 /* Store for CV and Knob values*/
-int cv_values[4] = {0,0,0,0};
+float cv_values[4] = {0, 0, 0, 0};
 
-/* Vars used for calculation */
-float dryValue = 0.94f;
-int dryCalc[2] {0,0};
-
-float wetValue = 0.94f;
-int wetCalc[2] {0,0};
-
-float LPFValue = 10000.0f;
-int filterCalc[2] {0,0};
-
-float feedbackValue = 0.5f;
-int feedbackCalc[2] {0,0};
+// values for each parameter
+float param_values[5] = {0, 0, 0, 0, 0};
 
 /* value for the menu that is showing on screen
 0 = main
@@ -57,9 +53,8 @@ bool editing = false;
 // tracked whether the menu was already swapped with the current encoder press
 bool menuSwapped = false;
 
-/* variable for CV setting menu */
-int cv_link[4] = {0,1,2,3};
-std::string parameter_strings[5] {"dry", "wet", "LPF", "HPF", "feedback"};
+/* variables for CV settings menu */
+std::string parameter_strings[5] {"dry", "wet", "LPF", "HPF", "feed"};
 std::string mapping_strings[5] {"bias", "Pot1", "Pot2", "CV1", "CV2"};
 std::string sign_strings[3] {"-", "0", "+"};
 std::string multiplier_strings[5] {"/4", "/2", "x1", "x2", "x4"};
@@ -87,6 +82,10 @@ int mapping_indices[5][8] = {
 /* Value of the encoder */
 int enc_val = 0;
 
+void drawParamVisual(int index, int x, int y) {
+    bluemchen.display.DrawRect(x, y, x+std::min(int(param_values[index]*10), 10), y+8, true, true);
+}
+
 void MainMenu() {
     bluemchen.display.SetCursor(0, 0);
     std::string str = "  KVERB";
@@ -104,6 +103,7 @@ void MainMenu() {
         bluemchen.display.SetCursor(6, 8*(1+p-firstOptionToDraw));
         str = parameter_strings[p];
         bluemchen.display.WriteString(cstr, Font_6x8, true);
+        drawParamVisual(p, 36, 8*(1+p-firstOptionToDraw));
     }
 }
 
@@ -154,7 +154,7 @@ void MappingMenu() {
             bluemchen.display.DrawRect(11, 16, 17, 22, true, true);
         }
         bluemchen.display.SetCursor(12, 16);
-        str = sign_strings[mapping_indices[currentParam][currentMapping*2]];
+        str = sign_strings[mapping_indices[currentParam][(currentMapping-1)*2]];
         bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
 
         inverted = editing && mappingMenuSelection == 1;
@@ -162,7 +162,7 @@ void MappingMenu() {
             bluemchen.display.DrawRect(11, 24, 17, 32, true, true);
         }
         bluemchen.display.SetCursor(12, 24);
-        str = multiplier_strings[mapping_indices[currentParam][currentMapping*2+1]];
+        str = multiplier_strings[mapping_indices[currentParam][(currentMapping-1)*2+1]];
         bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
     }
 }
@@ -226,8 +226,8 @@ void processEncoder() {
             }
             else {
                 if (editing) {
-                    mapping_indices[currentParam][mappingMenuSelection+currentMapping*2] = std::min(std::max(
-                        int(mapping_indices[currentParam][mappingMenuSelection+currentMapping*2] + bluemchen.encoder.Increment()),
+                    mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] = std::min(std::max(
+                        int(mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] + bluemchen.encoder.Increment()),
                         0),
                         mappingMenuSelection == 0 ? 2 : 4);
                 }
@@ -239,65 +239,58 @@ void processEncoder() {
     }
 }
 
-void calculateValues() {
-    // reset values
-    for(int j = 0; j < 2; j++) {
-        dryCalc[j] = 0;
-        wetCalc[j] = 0;
-        filterCalc[j] = 0;
-        feedbackCalc[j] = 0;
-    }    
-
-    for(int i = 0; i < 4; i++) {
-        switch (cv_link[i]) {
+float calculateMappingEffect(int controlIndex, int mappingIndex) {
+    switch (mappingIndex) {
+        // "/4", "/2", "x1", "x2", "x4"
         case 0:
-            /* dry */
-            dryCalc[0] += cv_values[i];
-            dryCalc[1]++;
-            break;
-        
+            return cv_values[controlIndex] / 4.0f;
         case 1:
-            /* wet */
-            wetCalc[0] += cv_values[i];
-            wetCalc[1]++;
-            break;
-
+            return cv_values[controlIndex] / 2.0f;
         case 2:
-            /* Filter */
-            filterCalc[0] += cv_values[i];
-            filterCalc[1]++;
-            break;
-
+            return cv_values[controlIndex];
         case 3:
-            /* wet */
-            feedbackCalc[0] += cv_values[i];
-            feedbackCalc[1]++;
-            break;
-        
-        default:
-            break;
-        }        
+            return cv_values[controlIndex] * 2.0f;
+        case 4:
+            return cv_values[controlIndex] * 4.0f;
     }
 
-    dryValue = ((dryCalc[0] / dryCalc[1]) * 0.00025f);
-    wetValue = ((wetCalc[0] / wetCalc[1]) * 0.00025f);
-    LPFValue = 10000.0f + ( (filterCalc[0] / filterCalc[1]) * 2.0f );
-    feedbackValue = 0.5f + ( (feedbackCalc[0] / feedbackCalc[1]) / 10000.0f);
+    return 0.0f;
 }
 
-void processCVandKnobs() {
+void calculateValues() {
+    for (int p = 0; p < 5; p++) {
+        param_values[p] = biases[p];
+
+        for (int cv = 0; cv < 4; cv ++) {
+            switch (mapping_indices[p][cv*2]) {
+                case 0:
+                    // negative mapping
+                    param_values[p] -= calculateMappingEffect(cv, mapping_indices[p][cv*2+1]);
+                    break;
+                case 1:
+                    // no mapping
+                    break;
+                case 2:
+                    // positive mapping
+                    param_values[p] += calculateMappingEffect(cv, mapping_indices[p][cv*2+1]);
+                    break;
+            }
+        }
+
+        // clamp all values between 0 and 1
+        param_values[p] = std::min(std::max(param_values[p], 0.0f), 1.0f);
+    }
+}
+
+void UpdateControls() {
+    bluemchen.ProcessAllControls();
+
     cv_values[0] = knob1.Process();
     cv_values[1] = knob2.Process();  
     cv_values[2] = cv1.Process();
     cv_values[3] = cv2.Process();
 
     calculateValues();
-}
-
-void UpdateControls() {
-    bluemchen.ProcessAllControls();
-
-    processCVandKnobs();
 
     processEncoder();
 }
@@ -307,21 +300,21 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
    
     bluemchen.ProcessAnalogControls();
     
-    for(size_t i = 0; i < size; i++)
-    {
-        // read some controls
-        drylevel = dryValue;
-        send     = wetValue;
-        verb.SetFeedback(feedbackValue);
-        verb.SetLpFreq(LPFValue);
+    for(size_t i = 0; i < size; i++) {
+        verb.SetFeedback(param_values[FEED]);
+
+        // transform the LPF value from a 0-1 range to exponential hertz
+        float lpf_freq = param_values[LPF] * 100.0f;
+        lpf_freq = lpf_freq * lpf_freq * 2.0f;
+        verb.SetLpFreq(lpf_freq);
 
         // Read Inputs (only stereo in are used)
         dryL = in[0][i];
         dryR = in[1][i];
 
         // Send Signal to Reverb
-        sendL = dryL * send;
-        sendR = dryR * send;
+        sendL = dryL * param_values[WET];
+        sendR = dryR * param_values[WET];
         verb.Process(sendL, sendR, &wetL, &wetR);
 
         // Dc Block
@@ -329,8 +322,8 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         wetR = blk[1].Process(wetR);
 
         // Out 1 and 2 are Mixed
-        out[0][i] = (dryL * drylevel) + wetL;
-        out[1][i] = (dryR * drylevel) + wetR;
+        out[0][i] = (dryL * param_values[DRY]) + wetL;
+        out[1][i] = (dryR * param_values[DRY]) + wetR;
 
         // Out 3 and 4 are just wet
         out[2][i] = wetL;
@@ -345,19 +338,17 @@ int main(void) {
     samplerate = bluemchen.AudioSampleRate();
 
     verb.Init(samplerate);
-    verb.SetFeedback(feedbackValue);
-    verb.SetLpFreq(LPFValue);
+    verb.SetFeedback(param_values[FEED]);
+    verb.SetLpFreq(param_values[LPF]);
 
-    knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 5000.0f, Parameter::LINEAR);
-    knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 5000.0f, Parameter::LINEAR);
+    knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
+    knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
 
-    cv1.Init(bluemchen.controls[bluemchen.CTRL_3], -5000.0f, 5000.0f, Parameter::LINEAR);
-    cv2.Init(bluemchen.controls[bluemchen.CTRL_4], -5000.0f, 5000.0f, Parameter::LINEAR);
+    cv1.Init(bluemchen.controls[bluemchen.CTRL_3], -1.0f, 1.0f, Parameter::LINEAR);
+    cv2.Init(bluemchen.controls[bluemchen.CTRL_4], -1.0f, 1.0f, Parameter::LINEAR);
     
     blk[0].Init(samplerate);
     blk[1].Init(samplerate);
-
-    lpParam.Init(bluemchen.controls[3], 20, 20000, Parameter::LOGARITHMIC);
 
     bluemchen.StartAdc();
     bluemchen.StartAudio(AudioCallback);
