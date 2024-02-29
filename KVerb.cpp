@@ -68,16 +68,22 @@ float bias_limits[5][3] = {
     {-1, 1, 0.1}, // feedback
 };
 
-float biases[5] = {0, 0, 0, 0, 0};
+struct Settings {
+    float biases[5];
 
-int mapping_indices[5][8] = {
     // Pot1 sign, Pot1 multiplier, Pot2 sign, Pot2 multiplier, CV1 sign, CV1 multiplier, CV2 sign, CV2 multiplier
-    {1, 2, 1, 2, 1, 2, 1, 2}, // dry
-    {1, 2, 1, 2, 1, 2, 1, 2}, // wet
-    {1, 2, 1, 2, 1, 2, 1, 2}, // LPF
-    {1, 2, 1, 2, 1, 2, 1, 2}, // HPF
-    {1, 2, 1, 2, 1, 2, 1, 2}, // feedback
+    int mapping_indices[5][8];
+
+    bool operator!=(const Settings& a) const {
+        return !(a.biases==biases && a.mapping_indices==mapping_indices);
+    };
 };
+
+Settings LocalSettings;
+
+PersistentStorage<Settings> SavedSettings(bluemchen.seed.qspi);
+
+bool trigger_save = false;
 
 /* Value of the encoder */
 int enc_val = 0;
@@ -140,7 +146,7 @@ void MappingMenu() {
     if (currentMapping == 0) {
         // bias mapping
         bluemchen.display.SetCursor(6, 16);
-        str = std::to_string(biases[currentParam]);
+        str = std::to_string(LocalSettings.biases[currentParam]);
         bluemchen.display.WriteString(cstr, Font_6x8, true);
     }
     else {
@@ -154,7 +160,7 @@ void MappingMenu() {
             bluemchen.display.DrawRect(11, 16, 17, 22, true, true);
         }
         bluemchen.display.SetCursor(12, 16);
-        str = sign_strings[mapping_indices[currentParam][(currentMapping-1)*2]];
+        str = sign_strings[LocalSettings.mapping_indices[currentParam][(currentMapping-1)*2]];
         bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
 
         inverted = editing && mappingMenuSelection == 1;
@@ -162,7 +168,7 @@ void MappingMenu() {
             bluemchen.display.DrawRect(11, 24, 17, 32, true, true);
         }
         bluemchen.display.SetCursor(12, 24);
-        str = multiplier_strings[mapping_indices[currentParam][(currentMapping-1)*2+1]];
+        str = multiplier_strings[LocalSettings.mapping_indices[currentParam][(currentMapping-1)*2+1]];
         bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
     }
 }
@@ -198,6 +204,9 @@ void processEncoder() {
         if (!menuSwapped) {
             // short press
             if (currentMenu == 2 && currentMapping != 0) {
+                if (editing) {
+                    trigger_save = true;
+                }
                 editing = !editing;
             }
             else {
@@ -219,15 +228,15 @@ void processEncoder() {
         case 2:
             // mapping menu
             if (currentMapping == 0) {
-                biases[currentParam] = std::min(std::max(
-                    biases[currentParam] + bias_limits[currentParam][2] * bluemchen.encoder.Increment(), 
+                LocalSettings.biases[currentParam] = std::min(std::max(
+                    LocalSettings.biases[currentParam] + bias_limits[currentParam][2] * bluemchen.encoder.Increment(), 
                     bias_limits[currentParam][0]), 
                     bias_limits[currentParam][1]);
             }
             else {
                 if (editing) {
-                    mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] = std::min(std::max(
-                        int(mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] + bluemchen.encoder.Increment()),
+                    LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] = std::min(std::max(
+                        int(LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] + bluemchen.encoder.Increment()),
                         0),
                         mappingMenuSelection == 0 ? 2 : 4);
                 }
@@ -259,20 +268,20 @@ float calculateMappingEffect(int controlIndex, int mappingIndex) {
 
 void calculateValues() {
     for (int p = 0; p < 5; p++) {
-        param_values[p] = biases[p];
+        param_values[p] = LocalSettings.biases[p];
 
         for (int cv = 0; cv < 4; cv ++) {
-            switch (mapping_indices[p][cv*2]) {
+            switch (LocalSettings.mapping_indices[p][cv*2]) {
                 case 0:
                     // negative mapping
-                    param_values[p] -= calculateMappingEffect(cv, mapping_indices[p][cv*2+1]);
+                    param_values[p] -= calculateMappingEffect(cv, LocalSettings.mapping_indices[p][cv*2+1]);
                     break;
                 case 1:
                     // no mapping
                     break;
                 case 2:
                     // positive mapping
-                    param_values[p] += calculateMappingEffect(cv, mapping_indices[p][cv*2+1]);
+                    param_values[p] += calculateMappingEffect(cv, LocalSettings.mapping_indices[p][cv*2+1]);
                     break;
             }
         }
@@ -341,6 +350,20 @@ int main(void) {
     verb.SetFeedback(param_values[FEED]);
     verb.SetLpFreq(param_values[LPF]);
 
+    Settings DefaultSettings = {
+        {0, 0, 0, 0, 0}, //biases
+
+        { // mapping_indices
+            {1, 2, 1, 2, 1, 2, 1, 2}, // dry
+            {1, 2, 1, 2, 1, 2, 1, 2}, // wet
+            {1, 2, 1, 2, 1, 2, 1, 2}, // LPF
+            {1, 2, 1, 2, 1, 2, 1, 2}, // HPF
+            {1, 2, 1, 2, 1, 2, 1, 2}, // feedback
+        }
+    };
+
+    SavedSettings.Init(DefaultSettings);
+
     knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
     knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
 
@@ -353,9 +376,23 @@ int main(void) {
     bluemchen.StartAdc();
     bluemchen.StartAudio(AudioCallback);
 
-    while (1)
-    {
-        UpdateControls();
+    while (1) {
         UpdateOled();
+		if(trigger_save) {
+			trigger_save = false;
+
+            Settings &SavedSettingsPointer = SavedSettings.GetSettings();
+
+            // copy over the settings
+            for (int p = 0; p < 5; p++) {
+                for (int m = 0; m < 8; m++) {
+                    SavedSettingsPointer.mapping_indices[p][m] = LocalSettings.mapping_indices[p][m];
+                }
+
+                SavedSettingsPointer.biases[p] = LocalSettings.biases[p];
+            }
+
+			SavedSettings.Save(); // Writing locally stored settings to the external flash
+		}
     }
 }
