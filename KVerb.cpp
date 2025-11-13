@@ -218,7 +218,10 @@ void MappingMenu() {
     if (currentMapping == MAP_BIAS) {
         // bias mapping
         bluemchen.display.SetCursor(6, 16);
-        str = std::to_string(LocalSettings.biases[currentParam]);
+        // Format bias to 2 decimal places
+        char bias_str[8];
+        snprintf(bias_str, sizeof(bias_str), "%.2f", LocalSettings.biases[currentParam]);
+        str = std::string(bias_str);
         bluemchen.display.WriteString(cstr, Font_6x8, true);
     }
     else {
@@ -357,8 +360,18 @@ void processEncoder() {
             if (currentMapping == MAP_BIAS) {
                 int increment = bluemchen.encoder.Increment();
                 if (increment != 0) {
+                    // Calculate exponential step size based on encoder speed
+                    // Minimum step is 0.01, grows exponentially with speed
+                    float abs_increment = fabsf(float(increment));
+                    float step_size = 0.01f * powf(1.5f, abs_increment - 1.0f);
+                    // Cap maximum step to 0.5 for safety
+                    step_size = std::min(step_size, 0.5f);
+                    
+                    // Apply step with correct sign
+                    float delta = step_size * (increment > 0 ? 1.0f : -1.0f);
+                    
                     LocalSettings.biases[currentParam] = std::min(std::max(
-                        LocalSettings.biases[currentParam] + bias_limits[currentParam][2] * increment,
+                        LocalSettings.biases[currentParam] + delta,
                         bias_limits[currentParam][0]),
                         bias_limits[currentParam][1]);
                     trigger_save = true;
