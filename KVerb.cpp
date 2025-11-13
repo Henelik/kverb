@@ -228,17 +228,25 @@ void processEncoder() {
         case 2:
             // mapping menu
             if (currentMapping == 0) {
-                LocalSettings.biases[currentParam] = std::min(std::max(
-                    LocalSettings.biases[currentParam] + bias_limits[currentParam][2] * bluemchen.encoder.Increment(), 
-                    bias_limits[currentParam][0]), 
-                    bias_limits[currentParam][1]);
+                int increment = bluemchen.encoder.Increment();
+                if (increment != 0) {
+                    LocalSettings.biases[currentParam] = std::min(std::max(
+                        LocalSettings.biases[currentParam] + bias_limits[currentParam][2] * increment,
+                        bias_limits[currentParam][0]),
+                        bias_limits[currentParam][1]);
+                    trigger_save = true;
+                }
             }
             else {
                 if (editing) {
-                    LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] = std::min(std::max(
-                        int(LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] + bluemchen.encoder.Increment()),
-                        0),
-                        mappingMenuSelection == 0 ? 2 : 4);
+                    int increment = bluemchen.encoder.Increment();
+                    if (increment != 0) {
+                        LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] = std::min(std::max(
+                            int(LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] + increment),
+                            0),
+                            mappingMenuSelection == 0 ? 2 : 4);
+                        trigger_save = true;
+                    }
                 }
                 else {
                     mappingMenuSelection = std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), 0), 1);
@@ -363,6 +371,9 @@ int main(void) {
     };
 
     SavedSettings.Init(DefaultSettings);
+
+    // Load saved settings into LocalSettings
+    LocalSettings = SavedSettings.GetSettings();
 
     knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
     knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
