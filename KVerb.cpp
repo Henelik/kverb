@@ -11,6 +11,7 @@ Bluemchen bluemchen;
 static ReverbSc   verb;
 static DcBlock    blk[2];
 static Compressor sidechain[2]; // Stereo compressor for ducking wet signal
+static Svf        hpf[2]; // Stereo high-pass filter before reverb
 
 Parameter knob1;
 Parameter knob2;
@@ -481,13 +482,26 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         lpf_freq = lpf_freq * lpf_freq * 2.0f;
         verb.SetLpFreq(lpf_freq);
 
+        // transform the HPF value from a 0-1 range to exponential hertz
+        float hpf_freq = param_values[HPF] * 100.0f;
+        hpf_freq = hpf_freq * hpf_freq * 2.0f;
+        hpf[0].SetFreq(hpf_freq);
+        hpf[1].SetFreq(hpf_freq);
+
         // Read Inputs (only stereo in are used)
         dryL = in[0][i];
         dryR = in[1][i];
 
-        // Send Signal to Reverb
+        // Send Signal to Reverb with high-pass filtering
         sendL = dryL * param_values[WET];
         sendR = dryR * param_values[WET];
+        
+        // Apply high-pass filter before reverb
+        hpf[0].Process(sendL);
+        sendL = hpf[0].High();
+        hpf[1].Process(sendR);
+        sendR = hpf[1].High();
+        
         verb.Process(sendL, sendR, &wetL, &wetR);
 
         // Dc Block
@@ -522,7 +536,7 @@ int main(void) {
     verb.SetLpFreq(param_values[LPF]);
 
     DefaultSettings = {
-        {1, 0, 1, 0, 0.5, 0}, //biases
+        {1, 0, 1, 0.2, 0.5, 0}, //biases
 
         { // mapping_indices - all set to SIGN_OFF and MULT_X1
             {SIGN_NEGATIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // dry
@@ -544,6 +558,12 @@ int main(void) {
     sidechain[1].Init(samplerate);
     sidechain[0].AutoMakeup(false); // No makeup gain for ducking
     sidechain[1].AutoMakeup(false);
+
+    // Initialize high-pass filters
+    hpf[0].Init(samplerate);
+    hpf[1].Init(samplerate);
+    hpf[0].SetRes(0.5f); // Set resonance to a neutral value
+    hpf[1].SetRes(0.5f);
 
     knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
     knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
