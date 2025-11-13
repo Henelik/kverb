@@ -36,6 +36,7 @@ float param_values[6] = {0, 0, 0, 0, 0, 0};
 0 = main
 1 = parameter
 2 = mapping
+3 = confirmation (for INIT)
 */
 int currentMenu = 0;
 
@@ -54,6 +55,9 @@ bool editing = false;
 
 // tracked whether the menu was already swapped with the current encoder press
 bool menuSwapped = false;
+
+// confirmation menu selection (0 = NO, 1 = YES)
+int confirmSelection = 0;
 
 /* variables for CV settings menu */
 std::string parameter_strings[6] {"dry", "wet", "LPF", "HPF", "feed", "duck"};
@@ -91,8 +95,22 @@ bool trigger_save = false;
 /* Value of the encoder */
 int enc_val = 0;
 
+// Store default settings for reset
+Settings DefaultSettings;
+
 void drawParamVisual(int index, int x, int y) {
     bluemchen.display.DrawRect(x, y, x+std::min(int(param_values[index]*10), 10), y+8, true, true);
+}
+
+void resetToDefaults() {
+    // Copy default settings to local settings
+    for (int p = 0; p < 6; p++) {
+        LocalSettings.biases[p] = DefaultSettings.biases[p];
+        for (int m = 0; m < 8; m++) {
+            LocalSettings.mapping_indices[p][m] = DefaultSettings.mapping_indices[p][m];
+        }
+    }
+    trigger_save = true;
 }
 
 void MainMenu() {
@@ -102,17 +120,23 @@ void MainMenu() {
     bluemchen.display.WriteString(cstr, Font_6x8, true);
 
     // draw up to 3 of the options, starting with the one before the current selection
-    int firstOptionToDraw = std::min(std::max(currentParam - 1, 0), 2);
-    for(int p = firstOptionToDraw; p < 5 && p-firstOptionToDraw < 4; p++){
+    int firstOptionToDraw = std::min(std::max(currentParam - 1, 0), 4);
+    for(int p = firstOptionToDraw; p < 7 && p-firstOptionToDraw < 3; p++){
         if (p == currentParam) {
             bluemchen.display.SetCursor(0, 8*(1+p-firstOptionToDraw));
             str = ">";
             bluemchen.display.WriteString(cstr, Font_6x8, true);
         }
         bluemchen.display.SetCursor(6, 8*(1+p-firstOptionToDraw));
-        str = parameter_strings[p];
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
-        drawParamVisual(p, 36, 8*(1+p-firstOptionToDraw));
+        if (p < 6) {
+            str = parameter_strings[p];
+            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            drawParamVisual(p, 36, 8*(1+p-firstOptionToDraw));
+        } else {
+            // INIT option
+            str = "INIT";
+            bluemchen.display.WriteString(cstr, Font_6x8, true);
+        }
     }
 }
 
@@ -176,6 +200,37 @@ void MappingMenu() {
     }
 }
 
+void ConfirmationMenu() {
+    bluemchen.display.SetCursor(0, 0);
+    std::string str = "RESET TO";
+    char *cstr = &str[0];
+    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    
+    bluemchen.display.SetCursor(0, 8);
+    str = "DEFAULTS?";
+    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    
+    // NO option
+    if (confirmSelection == 0) {
+        bluemchen.display.SetCursor(0, 16);
+        str = ">";
+        bluemchen.display.WriteString(cstr, Font_6x8, true);
+    }
+    bluemchen.display.SetCursor(6, 16);
+    str = "NO";
+    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    
+    // YES option
+    if (confirmSelection == 1) {
+        bluemchen.display.SetCursor(0, 24);
+        str = ">";
+        bluemchen.display.WriteString(cstr, Font_6x8, true);
+    }
+    bluemchen.display.SetCursor(6, 24);
+    str = "YES";
+    bluemchen.display.WriteString(cstr, Font_6x8, true);
+}
+
 void UpdateOled() {
     bluemchen.display.Fill(false);
 
@@ -189,6 +244,9 @@ void UpdateOled() {
         case 2:
             MappingMenu();
             break;
+        case 3:
+            ConfirmationMenu();
+            break;
     }
 
     bluemchen.display.Update();
@@ -197,8 +255,14 @@ void UpdateOled() {
 void processEncoder() {
     if (!menuSwapped && bluemchen.encoder.Pressed()) {
         if (bluemchen.encoder.TimeHeldMs() > 500) {
-            // long press
-            currentMenu = std::max(currentMenu - 1, 0);
+            // long press - go back
+            if (currentMenu == 3) {
+                // Reset confirmation selection and go back to main menu
+                confirmSelection = 0;
+                currentMenu = 0;
+            } else {
+                currentMenu = std::max(currentMenu - 1, 0);
+            }
             menuSwapped = true;
         }
     }
@@ -212,6 +276,21 @@ void processEncoder() {
                 }
                 editing = !editing;
             }
+            else if (currentMenu == 3) {
+                // Confirmation menu
+                if (confirmSelection == 1) {
+                    // YES - reset to defaults
+                    resetToDefaults();
+                }
+                // Go back to main menu
+                confirmSelection = 0;
+                currentMenu = 0;
+            }
+            else if (currentMenu == 0 && currentParam == 6) {
+                // Selected INIT from main menu
+                currentMenu = 3;
+                confirmSelection = 0;
+            }
             else {
                 currentMenu = std::min(currentMenu + 1, 2);
             }
@@ -222,7 +301,7 @@ void processEncoder() {
     switch (currentMenu) {
         case 0:
             // main menu
-            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), 5);
+            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), 6);
             break;
         case 1:
             // parameter menu
@@ -255,6 +334,10 @@ void processEncoder() {
                     mappingMenuSelection = std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), 0), 1);
                 }
             }
+            break;
+        case 3:
+            // confirmation menu
+            confirmSelection = std::min(std::max(int(confirmSelection + bluemchen.encoder.Increment()), 0), 1);
             break;
     }
 }
@@ -389,8 +472,8 @@ int main(void) {
     verb.SetFeedback(param_values[FEED]);
     verb.SetLpFreq(param_values[LPF]);
 
-    Settings DefaultSettings = {
-        {0, 0, 0, 0, 0, 0}, //biases
+    DefaultSettings = {
+        {0, 0, 1, 0, 0, 0}, //biases
 
         { // mapping_indices
             {1, 2, 1, 2, 1, 2, 1, 2}, // dry
