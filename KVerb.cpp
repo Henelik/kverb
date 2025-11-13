@@ -10,6 +10,7 @@ Bluemchen bluemchen;
 
 static ReverbSc   verb;
 static DcBlock    blk[2];
+static Compressor sidechain[2]; // Stereo compressor for ducking wet signal
 
 Parameter knob1;
 Parameter knob2;
@@ -22,13 +23,14 @@ enum Params {
     LPF,
     HPF,
     FEED,
+    DUCK,
 };
 
 /* Store for CV and Knob values*/
 float cv_values[4] = {0, 0, 0, 0};
 
 // values for each parameter
-float param_values[5] = {0, 0, 0, 0, 0};
+float param_values[6] = {0, 0, 0, 0, 0, 0};
 
 /* value for the menu that is showing on screen
 0 = main
@@ -54,25 +56,26 @@ bool editing = false;
 bool menuSwapped = false;
 
 /* variables for CV settings menu */
-std::string parameter_strings[5] {"dry", "wet", "LPF", "HPF", "feed"};
+std::string parameter_strings[6] {"dry", "wet", "LPF", "HPF", "feed", "duck"};
 std::string mapping_strings[5] {"bias", "Pot1", "Pot2", "CV1", "CV2"};
 std::string sign_strings[3] {"-", "0", "+"};
 std::string multiplier_strings[5] {"/4", "/2", "x1", "x2", "x4"};
 
-float bias_limits[5][3] = {
+float bias_limits[6][3] = {
     // min, max, increment
     {-1, 1, 0.1}, // dry
     {-1, 1, 0.1}, // wet
     {-1, 1, 0.1}, // LPF
     {-1, 1, 0.1}, // HPF
     {-1, 1, 0.1}, // feedback
+    {-1, 1, 0.1}, // ducking
 };
 
 struct Settings {
-    float biases[5];
+    float biases[6];
 
     // Pot1 sign, Pot1 multiplier, Pot2 sign, Pot2 multiplier, CV1 sign, CV1 multiplier, CV2 sign, CV2 multiplier
-    int mapping_indices[5][8];
+    int mapping_indices[6][8];
 
     bool operator!=(const Settings& a) const {
         return !(a.biases==biases && a.mapping_indices==mapping_indices);
@@ -219,7 +222,7 @@ void processEncoder() {
     switch (currentMenu) {
         case 0:
             // main menu
-            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), 4);
+            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), 5);
             break;
         case 1:
             // parameter menu
@@ -275,7 +278,7 @@ float calculateMappingEffect(int controlIndex, int mappingIndex) {
 }
 
 void calculateValues() {
-    for (int p = 0; p < 5; p++) {
+    for (int p = 0; p < 6; p++) {
         param_values[p] = LocalSettings.biases[p];
 
         for (int cv = 0; cv < 4; cv ++) {
@@ -317,6 +320,27 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
    
     bluemchen.ProcessAnalogControls();
     
+    // Update compressor parameters based on ducking amount
+    float duck_amount = param_values[DUCK];
+    if (duck_amount > 0.01f) {
+        // Convert 0-1 range to useful compressor parameters
+        // Higher duck_amount = more aggressive ducking
+        float threshold = -30.0f + (duck_amount * 25.0f); // -30dB to -5dB
+        float ratio = 1.0f + (duck_amount * 9.0f);         // 1:1 to 10:1
+        float attack = 0.001f + ((1.0f - duck_amount) * 0.019f); // 1ms to 20ms
+        float release = 0.05f + ((1.0f - duck_amount) * 0.45f);  // 50ms to 500ms
+        
+        sidechain[0].SetThreshold(threshold);
+        sidechain[0].SetRatio(ratio);
+        sidechain[0].SetAttack(attack);
+        sidechain[0].SetRelease(release);
+        
+        sidechain[1].SetThreshold(threshold);
+        sidechain[1].SetRatio(ratio);
+        sidechain[1].SetAttack(attack);
+        sidechain[1].SetRelease(release);
+    }
+    
     for(size_t i = 0; i < size; i++) {
         verb.SetFeedback(param_values[FEED]);
 
@@ -337,6 +361,13 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         // Dc Block
         wetL = blk[0].Process(wetL);
         wetR = blk[1].Process(wetR);
+
+        // Apply sidechain ducking if enabled
+        if (duck_amount > 0.01f) {
+            // Use dry signal as sidechain key to duck the wet signal
+            wetL = sidechain[0].Process(wetL, dryL);
+            wetR = sidechain[1].Process(wetR, dryR);
+        }
 
         // Out 1 and 2 are Mixed
         out[0][i] = (dryL * param_values[DRY]) + wetL;
@@ -359,7 +390,7 @@ int main(void) {
     verb.SetLpFreq(param_values[LPF]);
 
     Settings DefaultSettings = {
-        {0, 0, 0, 0, 0}, //biases
+        {0, 0, 0, 0, 0, 0}, //biases
 
         { // mapping_indices
             {1, 2, 1, 2, 1, 2, 1, 2}, // dry
@@ -367,6 +398,7 @@ int main(void) {
             {1, 2, 1, 2, 1, 2, 1, 2}, // LPF
             {1, 2, 1, 2, 1, 2, 1, 2}, // HPF
             {1, 2, 1, 2, 1, 2, 1, 2}, // feedback
+            {1, 2, 1, 2, 1, 2, 1, 2}, // ducking
         }
     };
 
@@ -374,6 +406,12 @@ int main(void) {
 
     // Load saved settings into LocalSettings
     LocalSettings = SavedSettings.GetSettings();
+
+    // Initialize sidechain compressors
+    sidechain[0].Init(samplerate);
+    sidechain[1].Init(samplerate);
+    sidechain[0].AutoMakeup(false); // No makeup gain for ducking
+    sidechain[1].AutoMakeup(false);
 
     knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
     knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
@@ -395,7 +433,7 @@ int main(void) {
             Settings &SavedSettingsPointer = SavedSettings.GetSettings();
 
             // copy over the settings
-            for (int p = 0; p < 5; p++) {
+            for (int p = 0; p < 6; p++) {
                 for (int m = 0; m < 8; m++) {
                     SavedSettingsPointer.mapping_indices[p][m] = LocalSettings.mapping_indices[p][m];
                 }
