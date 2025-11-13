@@ -13,6 +13,10 @@ static DcBlock    blk[2];
 static Compressor sidechain[2]; // Stereo compressor for ducking wet signal
 static Svf        hpf[2]; // Stereo high-pass filter before reverb
 
+// Pre-delay
+static float PRE_DELAY_MAX_SECONDS = 3.0f;
+static DelayLine<float, 50000 * PRE_DELAY_MAX_SECONDS> predelay[2]; // Stereo pre-delay before reverb
+
 Parameter knob1;
 Parameter knob2;
 Parameter cv1;
@@ -25,6 +29,7 @@ enum Params {
     HPF,
     FEED,
     DUCK,
+    PREDLY,
     PARAM_COUNT
 };
 
@@ -84,7 +89,7 @@ enum ConfirmOption {
 float cv_values[CTRL_COUNT] = {0, 0, 0, 0};
 
 // values for each parameter
-float param_values[PARAM_COUNT] = {0, 0, 0, 0, 0, 0};
+float param_values[PARAM_COUNT] = {0, 0, 0, 0, 0, 0, 0};
 
 /* value for the menu that is showing on screen */
 MenuState currentMenu = MENU_MAIN;
@@ -105,7 +110,7 @@ bool menuSwapped = false;
 ConfirmOption confirmSelection = CONFIRM_NO;
 
 /* variables for CV settings menu */
-std::string parameter_strings[PARAM_COUNT] {"dry", "wet", "LPF", "HPF", "feed", "duck"};
+std::string parameter_strings[PARAM_COUNT] {"dry", "wet", "LPF", "HPF", "feed", "duck", "prDly"};
 std::string mapping_strings[MAP_TYPE_COUNT] {"bias", "Pot1", "Pot2", "CV1", "CV2"};
 std::string sign_strings[SIGN_COUNT] {"-", "0", "+"};
 std::string multiplier_strings[MULT_COUNT] {"/4", "/2", "x1", "x2", "x4"};
@@ -118,6 +123,7 @@ float bias_limits[PARAM_COUNT][3] = {
     {-1, 1, 0.1}, // HPF
     {-1, 1, 0.1}, // feedback
     {-1, 1, 0.1}, // ducking
+    {-PRE_DELAY_MAX_SECONDS, PRE_DELAY_MAX_SECONDS, 0.1}, // pre-delay
 };
 
 struct Settings {
@@ -505,7 +511,7 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         dryL = in[0][i];
         dryR = in[1][i];
 
-        // Send Signal to Reverb with high-pass filtering
+        // Send Signal to Reverb with high-pass filtering and pre-delay
         sendL = dryL * param_values[WET];
         sendR = dryR * param_values[WET];
         
@@ -514,6 +520,13 @@ void AudioCallback(AudioHandle::InputBuffer in, AudioHandle::OutputBuffer out, s
         sendL = hpf[0].High();
         hpf[1].Process(sendR);
         sendR = hpf[1].High();
+        
+        // Apply pre-delay
+        float predly_samples = param_values[PREDLY] * samplerate;
+        predelay[0].Write(sendL);
+        predelay[1].Write(sendR);
+        sendL = predelay[0].Read(predly_samples);
+        sendR = predelay[1].Read(predly_samples);
         
         verb.Process(sendL, sendR, &wetL, &wetR);
 
@@ -549,7 +562,7 @@ int main(void) {
     verb.SetLpFreq(param_values[LPF]);
 
     DefaultSettings = {
-        {1, 0, 1, 0.2, 0.5, 0}, //biases
+        {1, 0, 1, 0.2, 0.5, 0, 0}, //biases (added pre-delay = 0)
 
         { // mapping_indices - all set to SIGN_OFF and MULT_X1
             {SIGN_NEGATIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // dry
@@ -558,6 +571,7 @@ int main(void) {
             {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // HPF
             {SIGN_OFF, MULT_X1, SIGN_POSITIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // feedback
             {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // ducking
+            {SIGN_OFF, MULT_X1, SIGN_POSITIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // pre-delay
         }
     };
 
@@ -577,6 +591,12 @@ int main(void) {
     hpf[1].Init(samplerate);
     hpf[0].SetRes(0.5f); // Set resonance to a neutral value
     hpf[1].SetRes(0.5f);
+
+    // Initialize pre-delay lines
+    predelay[0].Init();
+    predelay[1].Init();
+    predelay[0].SetDelay(1.0f); // Start with minimal delay
+    predelay[1].SetDelay(1.0f);
 
     knob1.Init(bluemchen.controls[bluemchen.CTRL_1], 0.0f, 1.0f, Parameter::LINEAR);
     knob2.Init(bluemchen.controls[bluemchen.CTRL_2], 0.0f, 1.0f, Parameter::LINEAR);
