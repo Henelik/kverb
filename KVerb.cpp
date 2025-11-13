@@ -305,7 +305,7 @@ void processEncoder() {
                 confirmSelection = CONFIRM_NO;
                 currentMenu = MENU_MAIN;
             } else {
-                currentMenu = static_cast<MenuState>(std::max(static_cast<int>(currentMenu) - 1, MENU_MAIN));
+                currentMenu = static_cast<MenuState>(std::max(static_cast<int>(currentMenu) - 1, int(MENU_MAIN)));
             }
             menuSwapped = true;
         }
@@ -336,7 +336,7 @@ void processEncoder() {
                 confirmSelection = CONFIRM_NO;
             }
             else {
-                currentMenu = static_cast<MenuState>(std::min(static_cast<int>(currentMenu) + 1, MENU_MAPPING));
+                currentMenu = static_cast<MenuState>(std::min(static_cast<int>(currentMenu) + 1, int(MENU_MAPPING)));
             }
         }
         menuSwapped = false;
@@ -345,11 +345,11 @@ void processEncoder() {
     switch (currentMenu) {
         case MENU_MAIN:
             // main menu
-            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), PARAM_COUNT);
+            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), int(PARAM_COUNT));
             break;
         case MENU_PARAMETER:
             // parameter menu
-            currentMapping = static_cast<MappingType>(std::min(std::max(int(currentMapping+bluemchen.encoder.Increment()), MAP_BIAS), MAP_CV2));
+            currentMapping = static_cast<MappingType>(std::min(std::max(int(currentMapping+bluemchen.encoder.Increment()), int(MAP_BIAS)), int(MAP_CV2)));
             break;
         case MENU_MAPPING:
             // mapping menu
@@ -375,13 +375,13 @@ void processEncoder() {
                     }
                 }
                 else {
-                    mappingMenuSelection = static_cast<MappingMenuOption>(std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), MAPOPT_SIGN), MAPOPT_MULTIPLIER));
+                    mappingMenuSelection = static_cast<MappingMenuOption>(std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), int(MAPOPT_SIGN)), int(MAPOPT_MULTIPLIER)));
                 }
             }
             break;
         case MENU_CONFIRMATION:
             // confirmation menu
-            confirmSelection = static_cast<ConfirmOption>(std::min(std::max(int(confirmSelection + bluemchen.encoder.Increment()), CONFIRM_NO), CONFIRM_YES));
+            confirmSelection = static_cast<ConfirmOption>(std::min(std::max(int(confirmSelection + bluemchen.encoder.Increment()), int(CONFIRM_NO)), int(CONFIRM_YES)));
             break;
     }
 }
@@ -522,14 +522,14 @@ int main(void) {
     verb.SetLpFreq(param_values[LPF]);
 
     DefaultSettings = {
-        {0, 0, 1, 0, 0, 0}, //biases
+        {1, 0, 1, 0, 0.5, 0}, //biases
 
         { // mapping_indices - all set to SIGN_OFF and MULT_X1
-            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // dry
-            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // wet
+            {SIGN_NEGATIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // dry
+            {SIGN_POSITIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // wet
             {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // LPF
             {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // HPF
-            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // feedback
+            {SIGN_OFF, MULT_X1, SIGN_POSITIVE, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // feedback
             {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // ducking
         }
     };
@@ -573,7 +573,7 @@ int main(void) {
                 SavedSettingsPointer.biases[p] = LocalSettings.biases[p];
             }
 
-   SavedSettings.Save(); // Writing locally stored settings to the external flash
+            SavedSettings.Save(); // Writing locally stored settings to the external flash
 		}
     }
 }
