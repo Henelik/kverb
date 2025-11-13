@@ -24,48 +24,92 @@ enum Params {
     HPF,
     FEED,
     DUCK,
+    PARAM_COUNT
+};
+
+enum MenuState {
+    MENU_MAIN,
+    MENU_PARAMETER,
+    MENU_MAPPING,
+    MENU_CONFIRMATION
+};
+
+enum ControlIndex {
+    CTRL_KNOB1,
+    CTRL_KNOB2,
+    CTRL_CV1,
+    CTRL_CV2,
+    CTRL_COUNT
+};
+
+enum MappingType {
+    MAP_BIAS,
+    MAP_POT1,
+    MAP_POT2,
+    MAP_CV1,
+    MAP_CV2,
+    MAP_TYPE_COUNT
+};
+
+enum SignValue {
+    SIGN_NEGATIVE,
+    SIGN_OFF,
+    SIGN_POSITIVE,
+    SIGN_COUNT
+};
+
+enum MultiplierValue {
+    MULT_DIV4,
+    MULT_DIV2,
+    MULT_X1,
+    MULT_X2,
+    MULT_X4,
+    MULT_COUNT
+};
+
+enum MappingMenuOption {
+    MAPOPT_SIGN,
+    MAPOPT_MULTIPLIER,
+    MAPOPT_COUNT
+};
+
+enum ConfirmOption {
+    CONFIRM_NO,
+    CONFIRM_YES,
+    CONFIRM_COUNT
 };
 
 /* Store for CV and Knob values*/
-float cv_values[4] = {0, 0, 0, 0};
+float cv_values[CTRL_COUNT] = {0, 0, 0, 0};
 
 // values for each parameter
-float param_values[6] = {0, 0, 0, 0, 0, 0};
+float param_values[PARAM_COUNT] = {0, 0, 0, 0, 0, 0};
 
-/* value for the menu that is showing on screen
-0 = main
-1 = parameter
-2 = mapping
-3 = confirmation (for INIT)
-*/
-int currentMenu = 0;
+/* value for the menu that is showing on screen */
+MenuState currentMenu = MENU_MAIN;
 
-/* value for the currently selected parameter
-index of parameter_strings
-*/
+/* value for the currently selected parameter */
 int currentParam = 0;
 
-/* value for the currently selected mapping
-index of mapping_strings
-*/
-int currentMapping = 0;
+/* value for the currently selected mapping */
+MappingType currentMapping = MAP_BIAS;
 
-int mappingMenuSelection = 0;
+MappingMenuOption mappingMenuSelection = MAPOPT_SIGN;
 bool editing = false;
 
 // tracked whether the menu was already swapped with the current encoder press
 bool menuSwapped = false;
 
-// confirmation menu selection (0 = NO, 1 = YES)
-int confirmSelection = 0;
+/* confirmation menu selection */
+ConfirmOption confirmSelection = CONFIRM_NO;
 
 /* variables for CV settings menu */
-std::string parameter_strings[6] {"dry", "wet", "LPF", "HPF", "feed", "duck"};
-std::string mapping_strings[5] {"bias", "Pot1", "Pot2", "CV1", "CV2"};
-std::string sign_strings[3] {"-", "0", "+"};
-std::string multiplier_strings[5] {"/4", "/2", "x1", "x2", "x4"};
+std::string parameter_strings[PARAM_COUNT] {"dry", "wet", "LPF", "HPF", "feed", "duck"};
+std::string mapping_strings[MAP_TYPE_COUNT] {"bias", "Pot1", "Pot2", "CV1", "CV2"};
+std::string sign_strings[SIGN_COUNT] {"-", "0", "+"};
+std::string multiplier_strings[MULT_COUNT] {"/4", "/2", "x1", "x2", "x4"};
 
-float bias_limits[6][3] = {
+float bias_limits[PARAM_COUNT][3] = {
     // min, max, increment
     {-1, 1, 0.1}, // dry
     {-1, 1, 0.1}, // wet
@@ -76,10 +120,10 @@ float bias_limits[6][3] = {
 };
 
 struct Settings {
-    float biases[6];
+    float biases[PARAM_COUNT];
 
     // Pot1 sign, Pot1 multiplier, Pot2 sign, Pot2 multiplier, CV1 sign, CV1 multiplier, CV2 sign, CV2 multiplier
-    int mapping_indices[6][8];
+    int mapping_indices[PARAM_COUNT][8];
 
     bool operator!=(const Settings& a) const {
         return !(a.biases==biases && a.mapping_indices==mapping_indices);
@@ -104,7 +148,7 @@ void drawParamVisual(int index, int x, int y) {
 
 void resetToDefaults() {
     // Copy default settings to local settings
-    for (int p = 0; p < 6; p++) {
+    for (int p = 0; p < PARAM_COUNT; p++) {
         LocalSettings.biases[p] = DefaultSettings.biases[p];
         for (int m = 0; m < 8; m++) {
             LocalSettings.mapping_indices[p][m] = DefaultSettings.mapping_indices[p][m];
@@ -120,15 +164,15 @@ void MainMenu() {
     bluemchen.display.WriteString(cstr, Font_6x8, true);
 
     // draw up to 3 of the options, starting with the one before the current selection
-    int firstOptionToDraw = std::min(std::max(currentParam - 1, 0), 4);
-    for(int p = firstOptionToDraw; p < 7 && p-firstOptionToDraw < 3; p++){
+    int firstOptionToDraw = std::min(std::max(currentParam - 1, 0), PARAM_COUNT - 2);
+    for(int p = firstOptionToDraw; p < PARAM_COUNT + 1 && p-firstOptionToDraw < 3; p++){
         if (p == currentParam) {
             bluemchen.display.SetCursor(0, 8*(1+p-firstOptionToDraw));
             str = ">";
             bluemchen.display.WriteString(cstr, Font_6x8, true);
         }
         bluemchen.display.SetCursor(6, 8*(1+p-firstOptionToDraw));
-        if (p < 6) {
+        if (p < PARAM_COUNT) {
             str = parameter_strings[p];
             bluemchen.display.WriteString(cstr, Font_6x8, true);
             drawParamVisual(p, 36, 8*(1+p-firstOptionToDraw));
@@ -147,8 +191,8 @@ void ParameterMenu() {
     bluemchen.display.WriteString(cstr, Font_6x8, true);
 
     // draw up to 3 of the options, starting with the one before the current selection
-    int firstOptionToDraw = std::min(std::max(currentMapping - 1, 0), 2);
-    for(int p = firstOptionToDraw; p < 5 && p-firstOptionToDraw < 4; p++){
+    int firstOptionToDraw = std::min(std::max(currentMapping - 1, 0), MAP_TYPE_COUNT - 3);
+    for(int p = firstOptionToDraw; p < MAP_TYPE_COUNT && p-firstOptionToDraw < 4; p++){
         if (p == currentMapping) {
             bluemchen.display.SetCursor(0, 8*(1+p-firstOptionToDraw));
             str = ">";
@@ -170,7 +214,7 @@ void MappingMenu() {
     str = mapping_strings[currentMapping];
     bluemchen.display.WriteString(cstr, Font_6x8, true);
 
-    if (currentMapping == 0) {
+    if (currentMapping == MAP_BIAS) {
         // bias mapping
         bluemchen.display.SetCursor(6, 16);
         str = std::to_string(LocalSettings.biases[currentParam]);
@@ -182,20 +226,20 @@ void MappingMenu() {
         str = ">";
         bluemchen.display.WriteString(cstr, Font_6x8, true);
 
-        bool inverted = editing && mappingMenuSelection == 0;
+        bool inverted = editing && mappingMenuSelection == MAPOPT_SIGN;
         if (inverted) {
             bluemchen.display.DrawRect(11, 16, 17, 22, true, true);
         }
         bluemchen.display.SetCursor(12, 16);
-        str = sign_strings[LocalSettings.mapping_indices[currentParam][(currentMapping-1)*2]];
+        str = sign_strings[LocalSettings.mapping_indices[currentParam][(currentMapping - MAP_POT1)*2]];
         bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
 
-        inverted = editing && mappingMenuSelection == 1;
+        inverted = editing && mappingMenuSelection == MAPOPT_MULTIPLIER;
         if (inverted) {
             bluemchen.display.DrawRect(11, 24, 17, 32, true, true);
         }
         bluemchen.display.SetCursor(12, 24);
-        str = multiplier_strings[LocalSettings.mapping_indices[currentParam][(currentMapping-1)*2+1]];
+        str = multiplier_strings[LocalSettings.mapping_indices[currentParam][(currentMapping - MAP_POT1)*2+1]];
         bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
     }
 }
@@ -211,7 +255,7 @@ void ConfirmationMenu() {
     bluemchen.display.WriteString(cstr, Font_6x8, true);
     
     // NO option
-    if (confirmSelection == 0) {
+    if (confirmSelection == CONFIRM_NO) {
         bluemchen.display.SetCursor(0, 16);
         str = ">";
         bluemchen.display.WriteString(cstr, Font_6x8, true);
@@ -221,7 +265,7 @@ void ConfirmationMenu() {
     bluemchen.display.WriteString(cstr, Font_6x8, true);
     
     // YES option
-    if (confirmSelection == 1) {
+    if (confirmSelection == CONFIRM_YES) {
         bluemchen.display.SetCursor(0, 24);
         str = ">";
         bluemchen.display.WriteString(cstr, Font_6x8, true);
@@ -235,16 +279,16 @@ void UpdateOled() {
     bluemchen.display.Fill(false);
 
     switch (currentMenu) {
-        case 0:
+        case MENU_MAIN:
             MainMenu();
             break;
-        case 1:
+        case MENU_PARAMETER:
             ParameterMenu();
             break;
-        case 2:
+        case MENU_MAPPING:
             MappingMenu();
             break;
-        case 3:
+        case MENU_CONFIRMATION:
             ConfirmationMenu();
             break;
     }
@@ -256,12 +300,12 @@ void processEncoder() {
     if (!menuSwapped && bluemchen.encoder.Pressed()) {
         if (bluemchen.encoder.TimeHeldMs() > 500) {
             // long press - go back
-            if (currentMenu == 3) {
+            if (currentMenu == MENU_CONFIRMATION) {
                 // Reset confirmation selection and go back to main menu
-                confirmSelection = 0;
-                currentMenu = 0;
+                confirmSelection = CONFIRM_NO;
+                currentMenu = MENU_MAIN;
             } else {
-                currentMenu = std::max(currentMenu - 1, 0);
+                currentMenu = static_cast<MenuState>(std::max(static_cast<int>(currentMenu) - 1, MENU_MAIN));
             }
             menuSwapped = true;
         }
@@ -270,46 +314,46 @@ void processEncoder() {
     if (bluemchen.encoder.FallingEdge()) {
         if (!menuSwapped) {
             // short press
-            if (currentMenu == 2 && currentMapping != 0) {
+            if (currentMenu == MENU_MAPPING && currentMapping != MAP_BIAS) {
                 if (editing) {
                     trigger_save = true;
                 }
                 editing = !editing;
             }
-            else if (currentMenu == 3) {
+            else if (currentMenu == MENU_CONFIRMATION) {
                 // Confirmation menu
-                if (confirmSelection == 1) {
+                if (confirmSelection == CONFIRM_YES) {
                     // YES - reset to defaults
                     resetToDefaults();
                 }
                 // Go back to main menu
-                confirmSelection = 0;
-                currentMenu = 0;
+                confirmSelection = CONFIRM_NO;
+                currentMenu = MENU_MAIN;
             }
-            else if (currentMenu == 0 && currentParam == 6) {
+            else if (currentMenu == MENU_MAIN && currentParam == PARAM_COUNT) {
                 // Selected INIT from main menu
-                currentMenu = 3;
-                confirmSelection = 0;
+                currentMenu = MENU_CONFIRMATION;
+                confirmSelection = CONFIRM_NO;
             }
             else {
-                currentMenu = std::min(currentMenu + 1, 2);
+                currentMenu = static_cast<MenuState>(std::min(static_cast<int>(currentMenu) + 1, MENU_MAPPING));
             }
         }
         menuSwapped = false;
     }
 
     switch (currentMenu) {
-        case 0:
+        case MENU_MAIN:
             // main menu
-            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), 6);
+            currentParam = std::min(std::max(int(currentParam+bluemchen.encoder.Increment()), 0), PARAM_COUNT);
             break;
-        case 1:
+        case MENU_PARAMETER:
             // parameter menu
-            currentMapping = std::min(std::max(int(currentMapping+bluemchen.encoder.Increment()), 0), 4);
+            currentMapping = static_cast<MappingType>(std::min(std::max(int(currentMapping+bluemchen.encoder.Increment()), MAP_BIAS), MAP_CV2));
             break;
-        case 2:
+        case MENU_MAPPING:
             // mapping menu
-            if (currentMapping == 0) {
+            if (currentMapping == MAP_BIAS) {
                 int increment = bluemchen.encoder.Increment();
                 if (increment != 0) {
                     LocalSettings.biases[currentParam] = std::min(std::max(
@@ -323,57 +367,62 @@ void processEncoder() {
                 if (editing) {
                     int increment = bluemchen.encoder.Increment();
                     if (increment != 0) {
-                        LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] = std::min(std::max(
-                            int(LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping-1)*2] + increment),
+                        LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping - MAP_POT1)*2] = std::min(std::max(
+                            int(LocalSettings.mapping_indices[currentParam][mappingMenuSelection+(currentMapping - MAP_POT1)*2] + increment),
                             0),
-                            mappingMenuSelection == 0 ? 2 : 4);
+                            mappingMenuSelection == MAPOPT_SIGN ? SIGN_COUNT - 1 : MULT_COUNT - 1);
                         trigger_save = true;
                     }
                 }
                 else {
-                    mappingMenuSelection = std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), 0), 1);
+                    mappingMenuSelection = static_cast<MappingMenuOption>(std::min(std::max(int(mappingMenuSelection + bluemchen.encoder.Increment()), MAPOPT_SIGN), MAPOPT_MULTIPLIER));
                 }
             }
             break;
-        case 3:
+        case MENU_CONFIRMATION:
             // confirmation menu
-            confirmSelection = std::min(std::max(int(confirmSelection + bluemchen.encoder.Increment()), 0), 1);
+            confirmSelection = static_cast<ConfirmOption>(std::min(std::max(int(confirmSelection + bluemchen.encoder.Increment()), CONFIRM_NO), CONFIRM_YES));
             break;
     }
 }
 
 float calculateMappingEffect(int controlIndex, int mappingIndex) {
+    // Normalize the control value based on its range
+    // Pots (CTRL_KNOB1, CTRL_KNOB2): range 0-1 → normalized to 0-1
+    // CVs (CTRL_CV1, CTRL_CV2): range -1 to +1 → normalized to -1 to +1 (already bipolar)
+    float normalizedValue = cv_values[controlIndex];
+    
+    // Apply multiplier to normalized value
     switch (mappingIndex) {
-        // "/4", "/2", "x1", "x2", "x4"
-        case 0:
-            return cv_values[controlIndex] / 4.0f;
-        case 1:
-            return cv_values[controlIndex] / 2.0f;
-        case 2:
-            return cv_values[controlIndex];
-        case 3:
-            return cv_values[controlIndex] * 2.0f;
-        case 4:
-            return cv_values[controlIndex] * 4.0f;
+        case MULT_DIV4:
+            return normalizedValue / 4.0f;
+        case MULT_DIV2:
+            return normalizedValue / 2.0f;
+        case MULT_X1:
+            return normalizedValue;
+        case MULT_X2:
+            return normalizedValue * 2.0f;
+        case MULT_X4:
+            return normalizedValue * 4.0f;
     }
 
     return 0.0f;
 }
 
 void calculateValues() {
-    for (int p = 0; p < 6; p++) {
+    for (int p = 0; p < PARAM_COUNT; p++) {
         param_values[p] = LocalSettings.biases[p];
 
-        for (int cv = 0; cv < 4; cv ++) {
+        for (int cv = 0; cv < CTRL_COUNT; cv ++) {
             switch (LocalSettings.mapping_indices[p][cv*2]) {
-                case 0:
+                case SIGN_NEGATIVE:
                     // negative mapping
                     param_values[p] -= calculateMappingEffect(cv, LocalSettings.mapping_indices[p][cv*2+1]);
                     break;
-                case 1:
+                case SIGN_OFF:
                     // no mapping
                     break;
-                case 2:
+                case SIGN_POSITIVE:
                     // positive mapping
                     param_values[p] += calculateMappingEffect(cv, LocalSettings.mapping_indices[p][cv*2+1]);
                     break;
@@ -388,10 +437,10 @@ void calculateValues() {
 void UpdateControls() {
     bluemchen.ProcessAllControls();
 
-    cv_values[0] = knob1.Process();
-    cv_values[1] = knob2.Process();  
-    cv_values[2] = cv1.Process();
-    cv_values[3] = cv2.Process();
+    cv_values[CTRL_KNOB1] = knob1.Process();
+    cv_values[CTRL_KNOB2] = knob2.Process();
+    cv_values[CTRL_CV1] = cv1.Process();
+    cv_values[CTRL_CV2] = cv2.Process();
 
     calculateValues();
 
@@ -475,13 +524,13 @@ int main(void) {
     DefaultSettings = {
         {0, 0, 1, 0, 0, 0}, //biases
 
-        { // mapping_indices
-            {1, 2, 1, 2, 1, 2, 1, 2}, // dry
-            {1, 2, 1, 2, 1, 2, 1, 2}, // wet
-            {1, 2, 1, 2, 1, 2, 1, 2}, // LPF
-            {1, 2, 1, 2, 1, 2, 1, 2}, // HPF
-            {1, 2, 1, 2, 1, 2, 1, 2}, // feedback
-            {1, 2, 1, 2, 1, 2, 1, 2}, // ducking
+        { // mapping_indices - all set to SIGN_OFF and MULT_X1
+            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // dry
+            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // wet
+            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // LPF
+            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // HPF
+            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // feedback
+            {SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1, SIGN_OFF, MULT_X1}, // ducking
         }
     };
 
@@ -516,7 +565,7 @@ int main(void) {
             Settings &SavedSettingsPointer = SavedSettings.GetSettings();
 
             // copy over the settings
-            for (int p = 0; p < 6; p++) {
+            for (int p = 0; p < PARAM_COUNT; p++) {
                 for (int m = 0; m < 8; m++) {
                     SavedSettingsPointer.mapping_indices[p][m] = LocalSettings.mapping_indices[p][m];
                 }
@@ -524,7 +573,7 @@ int main(void) {
                 SavedSettingsPointer.biases[p] = LocalSettings.biases[p];
             }
 
-			SavedSettings.Save(); // Writing locally stored settings to the external flash
+   SavedSettings.Save(); // Writing locally stored settings to the external flash
 		}
     }
 }
