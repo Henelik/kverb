@@ -16,7 +16,7 @@ static Svf        hpf[2]; // Stereo high-pass filter before reverb
 // Pre-delay
 static constexpr float PRE_DELAY_MAX_SECONDS = 3.0f;
 static constexpr size_t PRE_DELAY_BUFFER_SIZE = static_cast<size_t>(96000 * PRE_DELAY_MAX_SECONDS); // Buffer size for max 96kHz sample rate
-static DelayLine<float, PRE_DELAY_BUFFER_SIZE> predelay[2]; // Stereo pre-delay before reverb
+static DelayLine<float, PRE_DELAY_BUFFER_SIZE> predelay[2] __attribute__((section(".sdram_bss"))); // Stereo pre-delay before reverb
 
 static float samplerate; // Made static so AudioCallback can access it
 
