@@ -119,14 +119,14 @@ std::string sign_strings[SIGN_COUNT] {"-", "0", "+"};
 std::string multiplier_strings[MULT_COUNT] {"/4", "/2", "x1", "x2", "x4"};
 
 float bias_limits[PARAM_COUNT][3] = {
-    // min, max, increment
-    {-1, 1, 0.1}, // dry
-    {-1, 1, 0.1}, // wet
-    {-1, 1, 0.1}, // LPF
-    {-1, 1, 0.1}, // HPF
-    {-1, 1, 0.1}, // feedback
-    {-1, 1, 0.1}, // ducking
-    {-PRE_DELAY_MAX_SECONDS, PRE_DELAY_MAX_SECONDS, 0.1}, // pre-delay
+    // min, max
+    {-1, 1}, // dry
+    {-1, 1}, // wet
+    {-1, 1}, // LPF
+    {-1, 1}, // HPF
+    {-1, 1}, // feedback
+    {-1, 1}, // ducking
+    {-PRE_DELAY_MAX_SECONDS, PRE_DELAY_MAX_SECONDS}, // pre-delay
 };
 
 struct Settings {
@@ -170,8 +170,7 @@ void resetToDefaults() {
 void MainMenu() {
     bluemchen.display.SetCursor(0, 0);
     std::string str = "  KVERB";
-    char *cstr = &str[0];
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
 
     // draw up to 3 of the options, starting with the one before the current selection
     int firstOptionToDraw = std::min(std::max(currentParam - 1, 0), PARAM_COUNT - 2);
@@ -179,17 +178,17 @@ void MainMenu() {
         if (p == currentParam) {
             bluemchen.display.SetCursor(0, 8*(1+p-firstOptionToDraw));
             str = ">";
-            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
         }
         bluemchen.display.SetCursor(6, 8*(1+p-firstOptionToDraw));
         if (p < PARAM_COUNT) {
             str = parameter_strings[p];
-            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
             drawParamVisual(p, 36, 8*(1+p-firstOptionToDraw));
         } else {
             // INIT option
             str = "INIT";
-            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
         }
     }
 }
@@ -197,8 +196,7 @@ void MainMenu() {
 void ParameterMenu() {
     bluemchen.display.SetCursor(0, 0);
     std::string str = parameter_strings[currentParam];
-    char *cstr = &str[0];
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
 
     // draw up to 3 of the options, starting with the one before the current selection
     int firstOptionToDraw = std::min(std::max(currentMapping - 1, 0), MAP_TYPE_COUNT - 3);
@@ -206,23 +204,22 @@ void ParameterMenu() {
         if (p == currentMapping) {
             bluemchen.display.SetCursor(0, 8*(1+p-firstOptionToDraw));
             str = ">";
-            bluemchen.display.WriteString(cstr, Font_6x8, true);
+            bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
         }
         bluemchen.display.SetCursor(6, 8*(1+p-firstOptionToDraw));
         str = mapping_strings[p];
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     }
 }
 
 void MappingMenu() {
     bluemchen.display.SetCursor(0, 0);
     std::string str = parameter_strings[currentParam];
-    char *cstr = &str[0];
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
 
     bluemchen.display.SetCursor(6, 8);
     str = mapping_strings[currentMapping];
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
 
     if (currentMapping == MAP_BIAS) {
         // bias mapping
@@ -231,13 +228,13 @@ void MappingMenu() {
         char bias_str[8];
         snprintf(bias_str, sizeof(bias_str), "%.2f", LocalSettings.biases[currentParam]);
         str = std::string(bias_str);
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     }
     else {
         // CV or pot mapping
         bluemchen.display.SetCursor(0, 16 + 8*mappingMenuSelection);
         str = ">";
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
 
         bool inverted = editing && mappingMenuSelection == MAPOPT_SIGN;
         if (inverted) {
@@ -245,7 +242,7 @@ void MappingMenu() {
         }
         bluemchen.display.SetCursor(12, 16);
         str = sign_strings[LocalSettings.mapping_indices[currentParam][(currentMapping - MAP_POT1)*2]];
-        bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, !inverted);
 
         inverted = editing && mappingMenuSelection == MAPOPT_MULTIPLIER;
         if (inverted) {
@@ -253,39 +250,38 @@ void MappingMenu() {
         }
         bluemchen.display.SetCursor(12, 24);
         str = multiplier_strings[LocalSettings.mapping_indices[currentParam][(currentMapping - MAP_POT1)*2+1]];
-        bluemchen.display.WriteString(cstr, Font_6x8, !inverted);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, !inverted);
     }
 }
 
 void ConfirmationMenu() {
     bluemchen.display.SetCursor(0, 0);
     std::string str = "RESET TO";
-    char *cstr = &str[0];
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     
     bluemchen.display.SetCursor(0, 8);
     str = "DEFAULTS?";
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     
     // NO option
     if (confirmSelection == CONFIRM_NO) {
         bluemchen.display.SetCursor(0, 16);
         str = ">";
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     }
     bluemchen.display.SetCursor(6, 16);
     str = "NO";
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     
     // YES option
     if (confirmSelection == CONFIRM_YES) {
         bluemchen.display.SetCursor(0, 24);
         str = ">";
-        bluemchen.display.WriteString(cstr, Font_6x8, true);
+        bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
     }
     bluemchen.display.SetCursor(6, 24);
     str = "YES";
-    bluemchen.display.WriteString(cstr, Font_6x8, true);
+    bluemchen.display.WriteString(str.c_str(), Font_6x8, true);
 }
 
 void UpdateOled() {
